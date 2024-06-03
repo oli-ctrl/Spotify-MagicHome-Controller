@@ -14,6 +14,7 @@ import socketserver
 
 # image imports
 import PIL.Image
+import colorthief
 
 ## misc imports
 import time
@@ -21,6 +22,7 @@ from datetime import datetime
 
 ## tkinter imports
 from tkinter import *
+from tkinter import ttk
 
 class Window():
     def __init__(self, master, config, api):
@@ -35,18 +37,22 @@ class Window():
         
         
         self.master.after(1, self.update)
-        self.colors = {"background": "grey50", "foreground": "grey40"}
+        self.colors = {"background": "grey50", "foreground": "grey40", "label": "grey60"}
         self.master.configure(bg=self.colors['background'])
 
         self.bulbConnected = False
+
         if self.config.getValue(keys=('Config_Constants','BULB_IP')) == "xxx.xxx.xxx.xxx" or self.config.getValue(keys=('Config_Constants','CLIENT_ID')) == "None" or self.config.getValue(keys=('Config_Constants','CLIENT_SECRET')) == "None":           
             self.validConfig = False
         else:
             self.validConfig = True
+
+        self.modes = ['Most Prominent', 'Average']
+        self.mode = self.config.getValue(keys=('Session','mode'))
+
         self.home()
         self.loopCount = 0
 
-        
         self.master.mainloop()
         
     def ConnectToBulb(self):
@@ -67,6 +73,17 @@ class Window():
         b = Button(self.master, text="Sign in", command=self.api.Get_OauthToken, bg=self.colors['foreground']).place(relx = 0.5, 
                    rely = 0.5,
                    anchor = 'center')
+        
+        Label(self.master, text="Mode", bg=self.colors['label']).place(relx = 0.5, 
+                   rely = 0.3,
+                   anchor = S)
+        self.modeList = ttk.Combobox(self.master, values=self.modes, state='readonly')
+        self.modeList.place(relx = 0.5, 
+                   rely = 0.3,
+                   anchor = N)
+        self.modeList.current(self.mode)
+        self.modeList.bind("<<ComboboxSelected>>", lambda event: self.__updateMode(self.modeList.get()))
+        
         self.textlog = Text(self.master, height=10, width=50, bg=self.colors['foreground'])
         self.textlog.config(state=DISABLED)
         self.textlog.place(relx = 0.5, 
@@ -91,8 +108,9 @@ class Window():
             self.master.after(200, self.update)
               
         else:
+
             if self.api.Get_CurrentSong():
-                color, brightness = self.api.get_average_color_brightness()
+                color, brightness = self.api.get_average_color_brightness(self.mode)
                 self.lights.setColor(color, brightness)
             self.master.after(2000, self.update)
 
@@ -101,6 +119,15 @@ class Window():
         self.textlog.insert(END, text + "\n")
         self.textlog.see(END)
         self.textlog.config(state=DISABLED)
+
+    def __updateMode(self, mode):
+        for i in range(len(self.modes)):
+            if self.modes[i] == mode:
+                self.mode = i   
+                self.config.updateValue(('Session','mode'), self.mode)
+                self.writeToLog(f"Mode set to {self.modes[i]}\n--------------------------------------------------")
+                color, brightness = self.api.get_average_color_brightness(self.mode)
+                self.lights.setColor(color, brightness)
 
 class ApiInterface():
     def __init__(self, config):
@@ -157,8 +184,7 @@ class ApiInterface():
                 'client_id': self.client_id,
                 'response_type': 'code',
                 'scope': scope,
-                'redirect_uri': self.redirect_uri,
-                'show_dialog': True
+                'redirect_uri': self.redirect_uri, 
         }
 
         auth_url = f"{self.auth_url}?{urllib.parse.urlencode(params)}"
@@ -251,7 +277,7 @@ class ApiInterface():
         if str(response) == "<Response [200]>":
             json_response = response.json()
             if json_response == None:
-                pass 
+                return False
             elif self.prev_song != json_response['item']['name']:
                 self.prev_song = json_response['item']['name']
                 playing = True
@@ -275,46 +301,47 @@ class ApiInterface():
             api.writeToLog(f"Error: {response}\n--------------------------------------------------")
         return playing
 
-    def get_average_color_brightness(self):
+    def get_average_color_brightness(self, mode):
         # Get width and height of Image
         img = PIL.Image.open(requests.get(self.image_url, stream=True).raw)
         if img.mode != 'RGB':
             img = img.convert('RGB')
         width, height = img.size
-        
-    
-        # Initialize Variable
-        r_total = 0
-        g_total = 0
-        b_total = 0
-    
-        count = 0
-    
-        # Iterate through each pixel
-        for x in range(0, width):
-            for y in range(0, height):
-                # r,g,b value of pixel
-                r, g, b = img.getpixel((x, y))
-    
-                r_total += r
-                g_total += g
-                b_total += b
-                count += 1
-            
-            r = round(r_total/count)
-            g = round(g_total/count)
-            b = round(b_total/count)
+        img.save("image.jpg")
 
-            brightness = round((((r_total+g_total+b_total)/3)/255/count)*100)
+
+        # Most Prominent
+        if mode == 0:
+            colorthief_instance = colorthief.ColorThief("image.jpg")
+            color = colorthief_instance.get_color(quality=1)
+            brightness = (((color[0] + color[1] + color[2]) /3 )/255) *100
+            r = color[0]
+            g = color[1]
+            b = color[2]
+
+            brightness = round(brightness)
+
+
+        # Average
+        elif mode == 1: 
+            img = img.resize((1, 1))
+            r, g, b = img.getpixel((0, 0))
+            brightness = (((r + g + b) /3 )/255) *100
+            brightness = round(brightness)
+
+        
         return (r, g, b), brightness
 
 class configManager():
     def __init__(self):
-        self.defaultConfig = {'Constants': {'REDIRECT_URI': 'http://localhost:5000/callback', 'AUTH_URL': 'https://accounts.spotify.com/authorize', 'TOKEN_URL': 'https://accounts.spotify.com/api/token', 'API_BASE_URL': 'https://api.spotify.com/v1/'}, 'Config_Constants': {'CLIENT_ID': 'None', 'CLIENT_SECRET': 'None', 'BULB_IP': 'xxx.xxx.xxx.xxx'}, 'Session': {'access_token': 'None', 'refresh_token': 'None', 'expires_at': 0}}
+        ## Default Config
+        defaultConfig = {'Constants': {'REDIRECT_URI': 'http://localhost:5000/callback', 'AUTH_URL': 'https://accounts.spotify.com/authorize', 'TOKEN_URL': 'https://accounts.spotify.com/api/token', 'API_BASE_URL': 'https://api.spotify.com/v1/'}, 
+                              'Config_Constants': {'CLIENT_ID': 'None', 'CLIENT_SECRET': 'None', 'BULB_IP': 'xxx.xxx.xxx.xxx'}, 
+                              'Session': {'access_token': 'None', 'refresh_token': 'None', 'expires_at': 0 , "mode": 0}}
         self.path = pathlib.Path(__file__).parent.resolve()
         if not pathlib.Path(f'{self.path}/config.json').exists():
             with open(f'{self.path}/config.json', 'w') as f:
-                json.dump(self.defaultConfig, f, indent=4)
+                json.dump(defaultConfig, f, indent=4)
         self.configpath = f'{self.path}/config.json'.replace("\"", "/")
         self.window = None
         
@@ -337,18 +364,22 @@ class lightsUpdater():
         self.color = self.bulb.getRgb()
         self.brightness = self.bulb.brightness
         self.window = None
+        self.minBrightness = 0
 
-    def setColor(self, color, brightness):
+    def setColor(self, color, brightness, log=True):
         self.color = color
         self.brightness = brightness
-        self.__updateLights()
+        if self.brightness < self.minBrightness:
+            self.brightness = self.minBrightness
+        self.__updateLights(log)
     
-    def __updateLights(self):
+    def __updateLights(self, log=True):
         r = self.color[0]
         g = self.color[1]
         b = self.color[2]
         self.bulb.setRgb(r,g,b, brightness= self.brightness)
-        self.window.writeToLog(f"Song: {api.prev_song} \nColor: {r}, {g}, {b} Brightness: {self.brightness}\n--------------------------------------------------")
+        if log:
+            self.window.writeToLog(f"Song: {api.prev_song} \nColor: {r}, {g}, {b} Brightness: {self.brightness} \nMode: {self.window.modes[self.window.mode]}\n--------------------------------------------------")
 
 config = configManager()
 api = ApiInterface(config)
