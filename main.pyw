@@ -31,7 +31,7 @@ class Window():
         self.master.geometry("500x500")
         self.master.resizable(False, False)
         self.master.after(1, self.update)
-        self.colors = {"background": "grey50", "foreground": "grey40", "label": "grey60"}
+        self.colors = {"background": "white", "title": "white", "label": "grey60", "button": "grey60", "log": "white"}
         self.master.configure(bg=self.colors['background'])
 
         ## sets the config and api objects, and passes self to them
@@ -72,18 +72,20 @@ class Window():
     
     def home(self):
         ## creates the screen, fills it with the elements and sets the colors
-        Label(self.master, text="Spotify Light Sync", font=("Arial", 24), bg=self.colors['foreground']).place(relx = 0.5, 
+        self.title = Label(self.master, text="Spotify Light Sync", font=("Cascadia Mono", 24), bg=self.colors['title'])
+        self.title.place(relx = 0.5, 
                    rely = 0,
                    anchor = 'n')
-        b = Button(self.master, text="Sign in", command=self.api.Get_OauthToken, bg=self.colors['foreground']).place(relx = 0.5, 
+        
+        b = Button(self.master, text="Sign in", command=self.api.Get_OauthToken, bg=self.colors['button'], font=("Cascadia Mono", 10)).place(relx = 0.5, 
                    rely = 0.4,
                    anchor = 'center')
         
-        Label(self.master, text="Mode", bg=self.colors['label']).place(relx = 0.5, 
+        Label(self.master, text="Mode", bg=self.colors['label'], font=("Cascadia Mono", 12)).place(relx = 0.5, 
                    rely = 0.3,
                    anchor = S)
         
-        self.modeList = ttk.Combobox(self.master, values=self.modes, state='readonly')
+        self.modeList = ttk.Combobox(self.master, values=self.modes, state='readonly', font=("Cascadia Mono", 10))
         self.modeList.place(relx = 0.5, 
                    rely = 0.3,
                    anchor = N)
@@ -91,7 +93,7 @@ class Window():
         self.modeList.bind("<<ComboboxSelected>>", lambda event: self.__updateMode(self.modeList.get()))
         
         
-        self.textlog = Text(self.master, height=16, width=58, bg=self.colors['foreground'])
+        self.textlog = Text(self.master, height=16, width=58, bg=self.colors['log'], font=("Cascadia Mono", 10))
         self.textlog.insert(END, "Welcome to Spotify Light Sync\n----------------------------------------------------------")
         self.textlog.config(state=DISABLED)
         self.textlog.place(relx = 0.5, 
@@ -121,6 +123,9 @@ class Window():
             if self.api.Get_CurrentSong():
                 color, brightness = self.api.get_average_color_brightness(self.mode)
                 self.lights.setColor(color, brightness)
+                self.master.config(bg=self.__RGBToHex(color))
+                self.title.config(bg=self.__RGBToHex(color))
+                self.title.config(fg=self.__RGBToHex(self.__invertRGB(color)))
             self.master.after(2000, self.update)
 
     ## writes text to the log
@@ -136,9 +141,16 @@ class Window():
             if self.modes[i] == mode:
                 self.mode = i   
                 self.config.updateValue(('Session','mode'), self.mode)
-                self.writeToLog(f"Mode set to {self.modes[i]}\n----------------------------------------------------------")
                 color, brightness = self.api.get_average_color_brightness(self.mode)
                 self.lights.setColor(color, brightness)
+
+    
+    def __RGBToHex(self, rgb):
+
+        return '#%02x%02x%02x' % rgb
+    
+    def __invertRGB(self, rgb):
+        return (255 - rgb[0], 255 - rgb[1], 255 - rgb[2])
 
 class ApiInterface():
     def __init__(self, config):
