@@ -48,7 +48,7 @@ class Window():
         else:
             self.validConfig = True
         ## current modes of color detection
-        self.modes = ['Most Prominent', 'Average', 'Most Prominent Contrast', 'Average Contrast']
+        self.modes = ['Most Prominent', 'Average', 'Most Prominent Contrast', 'Average Contrast', 'Most Prominent Inverted', 'average inverted']
         self.mode = self.config.getValue(keys=('Session','mode'))
 
         ## creates the home screen 
@@ -354,7 +354,7 @@ class ApiInterface():
         if mode == 0:
             colorthief_instance = colorthief.ColorThief(imagePath)
             color = colorthief_instance.get_color(quality=1)
-            brightness = max(color[0], color[1], color[2])/255 *100
+            brightness = max(color[0], color[1], color[2])
             r = color[0]
             g = color[1]
             b = color[2]
@@ -366,7 +366,7 @@ class ApiInterface():
         elif mode == 1: 
             img = img.resize((1, 1))
             r, g, b = img.getpixel((0, 0))
-            brightness = max(r, g, b) /255 *100
+            brightness = max(r, g, b)
             brightness = round(brightness)
 
         ## Most Prominent With increased Contrast
@@ -375,7 +375,7 @@ class ApiInterface():
 
 
             color = colorthief_instance.get_color(quality=1)
-            brightness = (((color[0] + color[1] + color[2]) /3 )/255) *100
+            brightness = ((color[0] + color[1] + color[2]) /3 )
             r = color[0]
             g = color[1]
             b = color[2]
@@ -386,8 +386,31 @@ class ApiInterface():
         elif mode == 3:
             img = img.resize((1, 1))
             r, g, b = img.getpixel((0, 0))
-            brightness = (((r + g + b) /3 )/255) *100
+            brightness = (r + g + b) /3 
             brightness = round(brightness)
+
+        ## Most Prominent Inverted
+        elif mode == 4:
+            colorthief_instance = colorthief.ColorThief(imagePath)
+            color = colorthief_instance.get_color(quality=1)
+            brightness = max(color[0], color[1], color[2])
+
+            r = 255 - color[0]
+            g = 255 - color[1]
+            b = 255 - color[2]
+            brightness = round(brightness)
+
+        ## average inverted
+        elif mode == 5:
+            img = img.resize((1, 1))
+            r, g, b = img.getpixel((0, 0))
+            brightness = max(r, g, b)
+            brightness = round(brightness)
+
+            r = 255 - r
+            g = 255 - g
+            b = 255 - b
+
         ## returns the color and brightness
         return (r, g, b), brightness
 
@@ -445,12 +468,14 @@ class lightsUpdater():
     
     ## updates the lights with the current color and brightness
     def __updateLights(self, log=True):
-        r = self.color[0]
-        g = self.color[1]
-        b = self.color[2]
-        self.bulb.setRgb(r,g,b, brightness= self.brightness)
-        if log:
-            self.window.writeToLog(f"Song: {api.prev_song} \nColor: {r}, {g}, {b} Brightness: {self.brightness} \nMode: {self.window.modes[self.window.mode]}\n----------------------------------------------------------")
+        self.bulb.refreshState()
+        if self.bulb.isOn():
+            r = self.color[0]
+            g = self.color[1]
+            b = self.color[2]
+            self.bulb.setRgb(r,g,b, brightness= self.brightness)
+            if log:
+                self.window.writeToLog(f"Song: {api.prev_song} \nColor: {r}, {g}, {b} Brightness: {self.brightness} \nMode: {self.window.modes[self.window.mode]}\n----------------------------------------------------------")
 
 
 ## declairs the objects
