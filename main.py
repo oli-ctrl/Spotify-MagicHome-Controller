@@ -48,7 +48,7 @@ class Window():
         else:
             self.validConfig = True
         ## current modes of color detection
-        self.modes = ['Most Prominent', 'Average']
+        self.modes = ['Most Prominent', 'Average', 'Most Prominent Contrast', 'Average Contrast']
         self.mode = self.config.getValue(keys=('Session','mode'))
 
         ## creates the home screen 
@@ -346,14 +346,15 @@ class ApiInterface():
         
         ## saves the image to a file, and gets the width and height
         width, height = img.size
-        img.save("image.jpg")
+        imagePath = f'{self.config.path}/image.jpg'
+        img.save(imagePath)
 
 
         ## Most Prominent
         if mode == 0:
-            colorthief_instance = colorthief.ColorThief("image.jpg")
+            colorthief_instance = colorthief.ColorThief(imagePath)
             color = colorthief_instance.get_color(quality=1)
-            brightness = (((color[0] + color[1] + color[2]) /3 )/255) *100
+            brightness = max(color[0], color[1], color[2])/255 *100
             r = color[0]
             g = color[1]
             b = color[2]
@@ -365,9 +366,28 @@ class ApiInterface():
         elif mode == 1: 
             img = img.resize((1, 1))
             r, g, b = img.getpixel((0, 0))
-            brightness = (((r + g + b) /3 )/255) *100
+            brightness = max(r, g, b) /255 *100
             brightness = round(brightness)
 
+        ## Most Prominent With increased Contrast
+        elif mode == 2:
+            colorthief_instance = colorthief.ColorThief(imagePath)
+
+
+            color = colorthief_instance.get_color(quality=1)
+            brightness = (((color[0] + color[1] + color[2]) /3 )/255) *100
+            r = color[0]
+            g = color[1]
+            b = color[2]
+
+            brightness = round(brightness)
+
+        ## Average with increased Contrast
+        elif mode == 3:
+            img = img.resize((1, 1))
+            r, g, b = img.getpixel((0, 0))
+            brightness = (((r + g + b) /3 )/255) *100
+            brightness = round(brightness)
         ## returns the color and brightness
         return (r, g, b), brightness
 
